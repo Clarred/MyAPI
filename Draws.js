@@ -40,6 +40,33 @@
 
 	}
 
+	function TurnToOperator( op, opds ){
+		let oper;
+		switch (op){
+			case "+":
+				oper = opds[0] + opds[1];
+			break;
+			case "-":
+				oper = opds[0] - opds[1];
+			break;
+			case "*":
+				oper = opds[0] * opds[1];
+			break;
+			case "/":
+				oper = opds[0] / opds[1];
+			break;
+		}
+
+		return oper;
+	}
+
+
+	function RenderThis( obj ){
+
+		ObjectRenderer.push( obj );
+
+	}
+
 	function Vector2( x=0, y=0 ){
 
 		this.x = x;
@@ -70,6 +97,38 @@
 
 	}
 
+	function InjectPositionRender( i=1, obj, s=null ){
+
+		if ( s != null ) console.log(s);
+
+		if ( i == 0 ){ i = 1; };
+		if ( i == "L" ){ i = 1; };
+		if ( i == "F" ){ i = ObjectRenderer.length-1; };
+
+
+		let ind = 0;
+		let hasObj = false
+		for ( var a = 0; a < ObjectRenderer.length; a++ ){
+			if ( ObjectRenderer[a] == obj ){
+				hasObj = true;
+				ind = a;
+				break;
+			}
+		}
+
+		if ( hasObj ){
+
+			ObjectRenderer.splice( ind, 1 );
+			ObjectRenderer.splice( i, 0, obj );
+
+		}else{
+
+			//console.warn("Error InjectPositionRender: Nao ha o objeto referido no array de renderizacao");
+
+		}
+
+	}
+
 	class InitCanvas {
 
 		constructor( w=300, h=300, color="#ffffff00", Parent=document.body ){
@@ -86,15 +145,25 @@
 			this.height = h;
 			this.Parent = Parent;
 			this.Color = color;
+			this.Bkground;
 			this.updateMatrix = function (){
 				
 				window.requestAnimationFrame( () => this.updateMatrix() );
 
-				this.width = window.innerWidth;
-				this.height = window.innerHeight;
+				this.width = window.innerWidth+2;
+				this.height = window.innerHeight+2;
 				this.CANVAS.style.position = 'absolute';
 				this.CANVAS.style.left = '0';
 				this.CANVAS.style.top = '0';
+
+				for ( var i = 0; i < ObjectRenderer.length; i++ ){
+					if ( ObjectRenderer[i] == this.Bkground ){
+						ObjectRenderer[i]._w = this.width;
+						ObjectRenderer[i]._h = this.height;
+						ObjectRenderer[i].position.x = this.width/2;
+						ObjectRenderer[i].position.y = this.height/2;
+					}
+				}
 
 			}
 
@@ -114,8 +183,8 @@
 
 		Paint (){
 
-			var Bkground = new Background( this.width/2, this.height/2, this.width, this.height );
-			Bkground.color.fill = this.Color;
+			this.Bkground = new Background( this.width/2, this.height/2, this.width, this.height );
+			this.Bkground.color.fill = this.Color;
 
 		}
 
@@ -167,16 +236,17 @@
 
 	}
 
-	function Ball( x=0, y=0, r=1, render=true ){
+	function Ball( x=0, y=0, r=1, render=true, style={} ){
 
 		this.type = 'Ball';
 
 		this.position = new Vector2( x, y );
 
+		this.origin = new Vector2( 0, 0 );
+		this.rotating = false;
+		this.angle = DegToRad(0);
+
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this._r = r;
 		this.ang = {
@@ -194,20 +264,110 @@
 			width: 2
 		}
 
-		this.Grab = false;
+		for ( var i = 0; i < Object.keys(style).length; i++ ){
+			let key = Object.keys(style)[i];
+			let val = Object.values(style)[i];
 
-		this.name;
-		this.nameSet = function ( x ){
+			if ( typeof val == "object" ){
+				for ( var ii = 0; ii < Object.keys(val).length; ii++ ){
+					let key2 = Object.keys(val)[ii];
+					let val2 = Object.values(val)[ii];
 
-			this.name = x;
-			new Text(this.name, null, this.position.x, this.position.y);
+					this[ key ][ key2 ] = val2;
+				}
+			}else{
+				this[ key ] = val;
+			}
 
 		}
+
+		this.strokeIt = function (){
+			this.isStroke = true;
+		}
+		this.fillIt = function (){
+			this.isFill = true;
+		}
+		this.strokeOnly = function (){
+			this.isFill = false;
+			this.isStroke = true;
+		}
+		this.fillOnly = function (){
+			this.isFill = true;
+			this.isStroke = false;
+		}
+
+		this.name = {};
+		this.nameSet = function ( x, align='center', edit={} ){
+
+			this.name.text = x;
+			this.name.align = align;
+			this.name.render = new Text(this.name.text, "bold 15px Arial", this.position.x, this.position.y, true, this.name.align);
+
+			let len = Object.keys(edit).length;
+			for ( var i = 0; i < len; i++ ){
+				let k = Object.keys(edit)[i];
+				let v = Object.values(edit)[i];
+
+				if ( typeof v == "object" ){
+					for ( var ii = 0; ii < Object.keys(v).length; ii++ ){
+						let k2 = Object.keys(v)[ii];
+						let v2 = Object.values(v)[ii];
+
+						if ( k2 == "x" || k2 == "y" ){
+							if ( typeof edit[ k ][ k2 ] == "string" ){
+								let sub = v2;
+								let operation = sub[0];
+								let construct = parseInt(sub.slice( sub.indexOf("|")+1, sub.length ) );
+
+								this.name.render[ k ][ k2 ] = TurnToOperator( operation, [ this.name.render[ k ][ k2 ], construct ] );
+							}else{
+								this.name.render[ k ][ k2 ] = v2;
+							}	
+						}else{
+
+							this.name.render[ k ][ k2 ] = v2;
+
+						}
+
+					}
+				}else{
+					if ( k == "_w" || k == "_h"){
+						if ( typeof edit[ k ] == "string" ){
+							let sub = edit[v];
+							let operation = sub[0];
+							let construct = parseInt(sub.slice( sub.indexOf("|")+1, sub.length ) );
+
+							this.name.render[ k ] = TurnToOperator( operation, [ this.name.render[ k ], construct ] );
+
+						}	
+					}
+					this.name.render[ k ] = v;
+
+				}
+
+			}
+
+		}
+
 		this.rotate = function( ang, i=0 ){
 			 
 			this.rotating = true;
 			this.angle = ang;
 
+		}
+		this.Render = function(){
+
+			this.render = true;
+			let renderNow = true;
+			for ( var a = 0; a < ObjectRenderer.length; a++ ){
+				if ( ObjectRenderer[a] == this ){
+					renderNow = false;
+				}
+			}
+			if ( renderNow ){
+				ObjectRenderer.push(this);
+			}
+			
 		}
 
 		this.remove = function(){
@@ -221,6 +381,7 @@
 				}
 
 			}
+			this.render = false;
 		}
 
 		this.StatusRender = function ( a ){
@@ -230,57 +391,26 @@
 				a.lineCap = this.line.type;
 			}
 
-			a.arc( this.position.x, this.position.y, this._r, this.ang.ai, this.ang.af );
+			
+
+			if ( !this.rotating ){
+			
+				a.arc( this.position.x, this.position.y, this._r, this.ang.ai, this.ang.af );
+
+			}else{
+
+				a.save();
+
+				a.translate(this.position.x, this.position.y);
+				a.rotate( this.angle );
+				a.arc( this.origin.x, this.origin.y, this._r, this.ang.ai, this.ang.af );				
+
+				a.restore();
+
+			}
 
 			if ( this.isFill ){a.fill();}
 			if ( this.isStroke ){a.stroke();}
-
-			if ( this.Grab ){
-				var allowToGrab = false;
-				var holdingBall = false;
-
-				var obj = this;
-
-				ActiveCanvas[0].CANVAS.addEventListener( 'mousemove', function (e){
-					var mx = e.offsetX;
-					var my = e.offsetY;
-					var hypon = {
-						x: Math.abs( obj.position.x - mx ),
-						y: Math.abs( obj.position.y - my ),
-						hyp: function (){return Math.sqrt( this.x**2 + this.y**2 );},
-						isInside: function(){ 
-							if ( this.hyp() <= obj._r ){ 
-								allowToGrab = true; 
-							}else{ 
-								allowToGrab = false; 
-							} 
-						}
-					}
-					
-					hypon.isInside();
-
-					if ( holdingBall ){
-						var distanceX = obj.position.x - mx;
-						var distanceY = obj.position.y - my;
-
-						obj.position.x -= distanceX;
-						obj.position.y -= distanceY;
-
-					}
-
-				})
-				ActiveCanvas[0].CANVAS.addEventListener( 'mousedown', function (){
-					if ( allowToGrab ){
-						holdingBall = true;
-					}
-				})
-				ActiveCanvas[0].CANVAS.addEventListener( 'mouseup', function (){
-					if ( allowToGrab ){
-						holdingBall = false;
-					}
-				})
-			}
-
 
 		}
 
@@ -291,7 +421,7 @@
 
 	function Background( x=0, y=0, w=1, h=1, render=true ){
 
-		this.type = 'Square';
+		this.type = 'Background';
 
 		this.position = new Vector2( x, y );
 
@@ -299,9 +429,6 @@
 		this.rotating = false;
 
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this._w = w;
 		this._h = h;
@@ -379,7 +506,7 @@
 
 	}
 
-	function Square( x=0, y=0, w=1, h=1, render=true ){
+	function Square( x=0, y=0, w=1, h=1, render=true, style={} ){
 
 		this.type = 'Square';
 
@@ -389,9 +516,6 @@
 		this.rotating = false;
 
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this._w = w;
 		this._h = h;
@@ -406,19 +530,100 @@
 			width: 2
 		}
 
-		this.Grab = false;
+		for ( var i = 0; i < Object.keys(style).length; i++ ){
+			let key = Object.keys(style)[i];
+			let val = Object.values(style)[i];
+
+			if ( typeof val == "object" ){
+				for ( var ii = 0; ii < Object.keys(val).length; ii++ ){
+					let key2 = Object.keys(val)[ii];
+					let val2 = Object.values(val)[ii];
+
+					this[ key ][ key2 ] = val2;
+				}
+			}else{
+				this[ key ] = val;
+			}
+
+		}
+
+		this.strokeIt = function (){
+			this.isStroke = true;
+		}
+		this.fillIt = function (){
+			this.isFill = true;
+		}
+		this.strokeOnly = function (){
+			this.isFill = false;
+			this.isStroke = true;
+		}
+		this.fillOnly = function (){
+			this.isFill = true;
+			this.isStroke = false;
+		}
+
+		this.Vertex = new Array(4);
+		this.Vertex[0] = new Vector2( this.position.x - this._w/2, this.position.y - this._h/2 );
+		this.Vertex[1] = new Vector2( this.position.x + this._w/2, this.position.y - this._h/2 );
+		this.Vertex[2] = new Vector2( this.position.x - this._w/2, this.position.y + this._h/2 );
+		this.Vertex[3] = new Vector2( this.position.x + this._w/2, this.position.y + this._h/2 );
 
 		this.canvasRendering = ActiveCanvas[0].CTX;
 		this.angle = DegToRad(0);
 
-		this.name;
-		this.nameSet = function ( x ){
+		this.name = {};
+		this.nameSet = function ( x, align='center', edit={} ){
 
-			this.name = x;
-			this.canvasRendering.textAlign = 'center';
-			new Text(this.name, "bold 15px Arial", this.position.x, this.position.y);
+			this.name.text = x;
+			this.name.align = align;
+			this.name.render = new Text(this.name.text, "bold 15px Arial", this.position.x, this.position.y, true, this.name.align);
+
+			let len = Object.keys(edit).length;
+			for ( var i = 0; i < len; i++ ){
+				let k = Object.keys(edit)[i];
+				let v = Object.values(edit)[i];
+
+				if ( typeof v == "object" ){
+					for ( var ii = 0; ii < Object.keys(v).length; ii++ ){
+						let k2 = Object.keys(v)[ii];
+						let v2 = Object.values(v)[ii];
+
+						if ( k2 == "x" || k2 == "y" ){
+							if ( typeof edit[ k ][ k2 ] == "string" ){
+								let sub = v2;
+								let operation = sub[0];
+								let construct = parseInt(sub.slice( sub.indexOf("|")+1, sub.length ) );
+
+								this.name.render[ k ][ k2 ] = TurnToOperator( operation, [ this.name.render[ k ][ k2 ], construct ] );
+							}else{
+								this.name.render[ k ][ k2 ] = v2;
+							}	
+						}else{
+
+							this.name.render[ k ][ k2 ] = v2;
+
+						}
+
+					}
+				}else{
+					if ( k == "_w" || k == "_h"){
+						if ( typeof edit[ k ] == "string" ){
+							let sub = edit[v];
+							let operation = sub[0];
+							let construct = parseInt(sub.slice( sub.indexOf("|")+1, sub.length ) );
+
+							this.name.render[ k ] = TurnToOperator( operation, [ this.name.render[ k ], construct ] );
+
+						}	
+					}
+					this.name.render[ k ] = v;
+
+				}
+
+			}
 
 		}
+
 		this.rotate = function( ang, i=0 ){
 			 
 			this.rotating = true;
@@ -437,11 +642,29 @@
 				}
 
 			}
+			this.render = false;
+		}
+
+		this.Render = function(){
+
+			this.render = true;
+			let renderNow = true;
+			for ( var a = 0; a < ObjectRenderer.length; a++ ){
+				if ( ObjectRenderer[a] == this ){
+					renderNow = false;
+				}
+			}
+			if ( renderNow ){
+				ObjectRenderer.push(this);
+			}
+			
 		}
 
 		this.StatusRender = function ( a ){
 
 			this.canvasRendering = a;
+
+			//this.name.render.text = this.name.text;
 
 			if ( this.line ){
 				a.lineWidth = this.line.width;
@@ -465,50 +688,6 @@
 
 				a.restore();
 
-			}
-
-
-			if ( this.Grab ){
-				var allowToGrab = false;
-				var holdingBall = false;
-
-				var obj = this;
-
-				ActiveCanvas[0].CANVAS.addEventListener( 'mousemove', function (e){
-					var mx = e.offsetX;
-					var my = e.offsetY;
-
-
-					if ( ( mx >= obj.position.x - obj._w/2 && mx <= obj.position.x + obj._w/2 ) &&
-						( my >= obj.position.y - obj._h/2 && my <= obj.position.y + obj._h/2 )){
-						
-						allowToGrab = true;
-
-					}else{
-						allowToGrab = false;
-					}
-
-
-					if ( holdingBall ){
-						var distanceX = obj.position.x - mx;
-						var distanceY = obj.position.y - my;
-
-						obj.position.x -= distanceX;
-						obj.position.y -= distanceY;
-
-					}
-
-				})
-				ActiveCanvas[0].CANVAS.addEventListener( 'mousedown', function (){
-					if ( allowToGrab ){
-						holdingBall = true;
-					}
-				})
-				ActiveCanvas[0].CANVAS.addEventListener( 'mouseup', function (){
-					if ( allowToGrab ){
-						holdingBall = false;
-					}
-				})
 			}
 
 		}
@@ -566,7 +745,7 @@
 				if ( a == 0 ){
 					minimumValue = arr[a];
 				}
-				if ( arr[a] >= minimumValue ){
+				if ( arr[a] <= minimumValue ){
 
 					minimumValue = arr[a];
 
@@ -581,7 +760,7 @@
 				if ( a == 1 ){
 					minimumValue = arr[a];
 				}
-				if ( arr[a] >= minimumValue ){
+				if ( arr[a] <= minimumValue ){
 
 					minimumValue = arr[a];
 
@@ -613,25 +792,49 @@
 
 	}*/
 
+	function Array2dTo1d( arr2d ){
+
+		var arr = [];
+		for ( var a = 0; a < arr2d.length; a++ ){
+			for ( var b = 0; b < arr2d[a].length; b++ ){
+				arr.push(arr2d[a][b]);
+			}
+		}
+		/*var o = 0;
+		arr2d.forEach( function (e, i){
+			e.forEach(function (e1, i1){
+				arr[o] = e1;
+				o++;
+			});
+		});*/
+
+		return arr;
+
+	}
+
 
 	function Line ( coords, render=true ) {
 
 		this.type = 'Line';
 
-		this.Coords = [];
+		this.position = {
+			Coords: [],
+			DeltaVertex: [],
+			V: []
+		};
 
 		this.coords = coords;
 
 		for ( var a = 0; a < coords.length; a+=2 ){
 
-			this.Coords.push( [coords[a], coords[a+1] ] );
+			this.position.Coords.push( [coords[a], coords[a+1] ] );
+
+			let index = this.position.Coords.length-1;
+			this.position.V[index] = {x: this.position.Coords[index][0], y: this.position.Coords[index][1] };
 
 		}
 
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this.close = false;
 		this.color = {
@@ -644,10 +847,38 @@
 			type: 'butt',
 			width: 2
 		}
+
+		this.strokeIt = function (){
+			this.isStroke = true;
+		}
+		this.fillIt = function (){
+			this.isFill = true;
+		}
+		this.strokeOnly = function (){
+			this.isFill = false;
+			this.isStroke = true;
+		}
+		this.fillOnly = function (){
+			this.isFill = true;
+			this.isStroke = false;
+		}
+
 		this.name;
 		this.nameSet = function ( x ){
 
 			this.name = x;
+
+		}
+		this.showVertex = false;
+		this.placedVertex = true;
+		this.newVertex = [];
+		this.Vertex = function (){
+			this.showVertex = true;
+		}
+
+		this.addVertex = function ( x, y ){
+
+			this.position.Coords.push( [ x, y ] );
 
 		}
 
@@ -657,12 +888,55 @@
 			var max = [ getHighValue( arr, x ), getHighValue( arr, y ) ]
 			var min = [ getLowValue( arr, x ), getLowValue( arr, y ) ]
 
-			this.x = Math.abs( max[0] - min[0] ) / 2;
-			this.y = Math.abs( max[1] - min[1] ) / 2;
+			this.x = ( max[0] - min[0] ) / 2;
+			this.y = ( max[1] - min[1] ) / 2;
+			this.min = min;
+			this.max = max;
 
 		}
 
-		this.position = new this.MiddlePoint( this.coords );
+		this.updateVertex = function (){
+			var ps = new this.MiddlePoint( this.coords );
+			this.position.x = ps.min[0] + ps.x;
+			this.position.y = ps.min[1] + ps.y;
+			this.size = {
+				_w: Math.abs( ps.max[0] - ps.min[0] ),
+				_h: Math.abs( ps.max[1] - ps.min[1] )
+			}	
+		}
+		this.updateVertex();	
+
+		this.DistVtx = function(){
+			for ( var a = 0; a < this.position.Coords.length; a++ ){
+				this.position.DeltaVertex.push( [ this.position.x - this.position.Coords[a][0], this.position.y - this.position.Coords[a][1] ] );
+			}
+		}
+		this.DistVtx();
+
+		this.updatePosition = function (){
+			window.requestAnimationFrame( () => this.updatePosition() );
+
+			for ( var t = 0; t < this.position.V.length; t++ ){
+				this.position.Coords[t] = [ this.position.V[t].x, this.position.V[t].y ];
+			}
+			for ( var a = 0; a < this.position.Coords.length; a++ ){
+				this.position.Coords[a] = [ this.position.x - this.position.DeltaVertex[a][0], this.position.y - this.position.DeltaVertex[a][1] ];
+			}
+
+			//update the length of coords vertex;
+			this.coords = Array2dTo1d(this.position.Coords);
+			this.updateVertex();
+
+		}
+		this.updatePosition();
+
+		this.position.set = function (x, y){
+			for ( var a = 0; a < this.position.Coords.length; a++ ){
+				this.position.Coords[a] = [ x - this.DeltaVertex[a][0], y - this.DeltaVertex[a][1] ];
+			}
+			this.x = x;
+			this.y = y;
+		}
 
 		this.remove = function(){
 			
@@ -675,26 +949,44 @@
 				}
 
 			}
+			this.render = false;
+		}
+
+		this.Render = function(){
+
+			this.render = true;
+			let renderNow = true;
+			for ( var a = 0; a < ObjectRenderer.length; a++ ){
+				if ( ObjectRenderer[a] == this ){
+					renderNow = false;
+				}
+			}
+			if ( renderNow ){
+				ObjectRenderer.push(this);
+			}
+			
 		}
 
 		this.StatusRender = function ( a ){
+
+			this.updateVertex();
 
 			if ( this.line ){
 				a.lineWidth = this.line.width;
 				a.lineCap = this.line.type;
 			}
 
-			for ( var z = 0; z < this.Coords.length; z++ ){
+			for ( var z = 0; z < this.position.Coords.length; z++ ){
 
 				if ( z == 0 ){ 
 
-					if ( this.Coords[0][0].type == "Bezier" ){
+					if ( this.position.Coords[0][0].type == "Bezier" ){
 
-						this.Coords[0][0].StatusRender( a );
+						this.position.Coords[0][0].StatusRender( a );
 
 					}else{
 
-						a.moveTo( this.Coords[0][0], this.Coords[0][1]); 
+						a.moveTo( this.position.Coords[0][0], this.position.Coords[0][1]); 
 
 					}
 
@@ -702,13 +994,13 @@
 				}
 				else { 
 
-					if ( this.Coords[z][0].type == "Bezier" ){
+					if ( this.position.Coords[z][0].type == "Bezier" ){
 
-						this.Coords[z][0].StatusRender( a );
+						this.position.Coords[z][0].StatusRender( a );
 
 					}else{
 
-						a.lineTo( this.Coords[z][0], this.Coords[z][1] ); 
+						a.lineTo( this.position.Coords[z][0], this.position.Coords[z][1] ); 
 
 					}
 
@@ -717,9 +1009,23 @@
 			}
 
 			if ( this.close ){
-				a.lineTo( this.Coords[0][0], this.Coords[0][1] );	
+				a.lineTo( this.position.Coords[0][0], this.position.Coords[0][1] );	
 			}
 			
+			if ( this.showVertex && this.placedVertex ){
+				for ( var i = 0; i < this.position.Coords.length; i++ ){
+					this.newVertex.push(new Ball( this.position.Coords[i][0], this.position.Coords[i][1], 4 ));
+					this.newVertex[i].color.fill = this.color.stroke;
+				}
+				this.placedVertex = false;
+			}else if ( this.showVertex && !this.placedVertex ){
+
+				for ( var i = 0; i < this.newVertex.length; i++ ){
+					this.newVertex[i].position.set(this.position.Coords[i][0], this.position.Coords[i][1] );
+					this.newVertex[i].color.fill = this.color.stroke;
+				}
+
+			}
 
 
 			if ( this.isFill ) { a.fill(); }
@@ -736,18 +1042,15 @@
 
 		this.type = 'Bezier';
 
-		this.Coords = [];
+		this.position.Coords = [];
 
 		for ( var a = 0; a < coords.length; a+=2 ){
 
-			this.Coords.push( [ coords[a], coords[a+1] ] );
+			this.position.Coords.push( [ coords[a], coords[a+1] ] );
 
 		}
 
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this.color = {
 			fill: DEFAULT_COLOR,
@@ -766,6 +1069,21 @@
 
 		}
 
+		this.strokeIt = function (){
+			this.isStroke = true;
+		}
+		this.fillIt = function (){
+			this.isFill = true;
+		}
+		this.strokeOnly = function (){
+			this.isFill = false;
+			this.isStroke = true;
+		}
+		this.fillOnly = function (){
+			this.isFill = true;
+			this.isStroke = false;
+		}
+
 		this.remove = function(){
 			
 			for ( var a = 0; a < ObjectRenderer.length; a++ ){
@@ -777,6 +1095,22 @@
 				}
 
 			}
+			this.render = false;
+		}
+
+		this.Render = function(){
+
+			this.render = true;
+			let renderNow = true;
+			for ( var a = 0; a < ObjectRenderer.length; a++ ){
+				if ( ObjectRenderer[a] == this ){
+					renderNow = false;
+				}
+			}
+			if ( renderNow ){
+				ObjectRenderer.push(this);
+			}
+			
 		}
 
 		this.Helper = function ( ){
@@ -801,7 +1135,7 @@
 				if ( e.keyCode == 13 ){
 
 					console.warn( "Draws.Bezier.Helper : Bezier Positions: ");
-					console.table( this.Coords );
+					console.table( this.position.Coords );
 
 				}
 				
@@ -811,25 +1145,25 @@
 			}
 
 			if ( window.Keys[ 37 ] ){	
-				this.Coords[window.Selection][0] -= 1;
+				this.position.Coords[window.Selection][0] -= 1;
 			}if ( window.Keys[ 38 ] ){	
-				this.Coords[window.Selection][1] -= 1;
+				this.position.Coords[window.Selection][1] -= 1;
 			}if ( window.Keys[ 39 ] ){	
-				this.Coords[window.Selection][0] += 1;
+				this.position.Coords[window.Selection][0] += 1;
 			}if ( window.Keys[ 40 ] ){	
-				this.Coords[window.Selection][1] += 1;
+				this.position.Coords[window.Selection][1] += 1;
 			}
 
 
 
-			var pointH = new Array(this.Coords.length);
+			var pointH = new Array(this.position.Coords.length);
 			var order = [ '#f00', '#0f0', '#00f', "#888" ];
 
 			if ( !this.PointHelpers ){
 
 				for ( var a = 0; a < pointH.length; a++ ){
 
-					pointH[a] = new Ball( this.Coords[a][0], this.Coords[a][1], 3 );
+					pointH[a] = new Ball( this.position.Coords[a][0], this.position.Coords[a][1], 3 );
 					pointH[a].color.fill = order[a];
 					pointH[a].color.isFill = true;
 
@@ -842,8 +1176,8 @@
 
 				for ( var a = 0; a < this.PointHelpers.length; a++ ){
 
-					this.PointHelpers[a].position.x = this.Coords[a][0];
-					this.PointHelpers[a].position.y = this.Coords[a][1];
+					this.PointHelpers[a].position.x = this.position.Coords[a][0];
+					this.PointHelpers[a].position.y = this.position.Coords[a][1];
 
 				}
 
@@ -859,17 +1193,17 @@
 				a.lineCap = this.line.type;
 			}
 
-			for ( var b = 0; b < this.Coords.length; b+=4 ){
+			for ( var b = 0; b < this.position.Coords.length; b+=4 ){
 
 				if ( b == 0 ) { 
-					a.moveTo( this.Coords[b][0], this.Coords[b][1] ); 
+					a.moveTo( this.position.Coords[b][0], this.position.Coords[b][1] ); 
 					a.bezierCurveTo( 
 
-					this.Coords[b+1][0], this.Coords[b+1][1],
+					this.position.Coords[b+1][0], this.position.Coords[b+1][1],
 
-					this.Coords[b+2][0], this.Coords[b+2][1],
+					this.position.Coords[b+2][0], this.position.Coords[b+2][1],
 
-					this.Coords[b+3][0], this.Coords[b+3][1],
+					this.position.Coords[b+3][0], this.position.Coords[b+3][1],
 
 				); }
 
@@ -886,7 +1220,13 @@
 
 	}
 
-	function Text( text, font="30px Arial", x=0, y=0, render=true ){
+	function Vanish(){
+
+		return new Object();
+
+	}
+
+	function Text( text, font="30px Arial", x=0, y=0, render=true, align="start" ){
 
 		if ( text == null || text == undefined ) { text = new String(); }
 		if ( font == 0 || font == null ){ font = '30px Arial'; }
@@ -897,12 +1237,11 @@
 
 		this.font = font;
 
+		this.align = align;
+
 		this.position = new Vector2( x, y );
 
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this.color = {
 			fill: DEFAULT_COLOR,
@@ -913,6 +1252,21 @@
 		this.line = {
 			type: 'butt',
 			width: 2
+		}
+
+		this.strokeIt = function (){
+			this.isStroke = true;
+		}
+		this.fillIt = function (){
+			this.isFill = true;
+		}
+		this.strokeOnly = function (){
+			this.isFill = false;
+			this.isStroke = true;
+		}
+		this.fillOnly = function (){
+			this.isFill = true;
+			this.isStroke = false;
 		}
 		this.name;
 		this.nameSet = function ( x ){
@@ -932,6 +1286,23 @@
 				}
 
 			}
+			this.render = false;
+
+		}
+
+		this.Render = function(){
+
+			this.render = true;
+			let renderNow = true;
+			for ( var a = 0; a < ObjectRenderer.length; a++ ){
+				if ( ObjectRenderer[a] == this ){
+					renderNow = false;
+				}
+			}
+			if ( renderNow ){
+				ObjectRenderer.push(this);
+			}
+			
 		}
 
 		this.StatusRender = function ( a ){
@@ -942,6 +1313,8 @@
 			}
 
 			a.font = this.font;
+
+			a.textAlign = this.align;
 
 			if ( this.isFill ) { a.fillText( this.text, this.position.x, this.position.y ); }
 			if ( this.isStroke ) { a.strokeText( this.text, this.position.x, this.position.y ); }
@@ -972,9 +1345,6 @@
 		this.position = new Vector2( x, y );
 
 		this.render = render;
-		if ( this.render == undefined || this.render == null || this.render == 0){
-			this.render = true;
-		}
 
 		this.ImageProperties.x = this.position.x;
 		this.ImageProperties.y = this.position.y;
@@ -1020,12 +1390,31 @@
 				}
 
 			}
+			this.render = false;
+		}
+
+		this.Render = function(){
+
+			this.render = true;
+			let renderNow = true;
+			for ( var a = 0; a < ObjectRenderer.length; a++ ){
+				if ( ObjectRenderer[a] == this ){
+					renderNow = false;
+				}
+			}
+			if ( renderNow ){
+				ObjectRenderer.push(this);
+			}
+			
 		}
 
 		this.StatusRender = function ( a ){
 
 			this.ImageProperties.x = this.position.x;
 			this.ImageProperties.y = this.position.y;
+
+			let w = this.img.width;
+			let h = this.img.height;
 
 			if ( this.ImageProperties.Rw  || this.ImageProperties.Cx ){
 				if ( this.ImageProperties.Cx ){
@@ -1034,11 +1423,13 @@
 
 				}else{
 
-					a.drawImage( this.img, this.ImageProperties.x, this.ImageProperties.y, this.ImageProperties.Rw, this.ImageProperties.Rh );
+					w = this.ImageProperties.Rw;
+					h = this.ImageProperties.Rh;
+					a.drawImage( this.img, this.ImageProperties.x-(w/2), this.ImageProperties.y-(h/2), this.ImageProperties.Rw, this.ImageProperties.Rh );
 				}
 			}else {
 
-				a.drawImage( this.img, this.ImageProperties.x, this.ImageProperties.y );	
+				a.drawImage( this.img, this.ImageProperties.x-(w/2), this.ImageProperties.y-(h/2) );	
 
 			}
 			
@@ -1072,7 +1463,7 @@
 
 			}
 
-			b.StatusRender( a, b );
+			b.StatusRender( a, b );	
 
 		}
 		
@@ -1113,10 +1504,15 @@
 	exports.SearchFromId = SearchFromId;
 	exports.Square = Square;
 	exports.Text = Text;
+	exports.Vanish = Vanish;
 	exports.Vector2 = Vector2;
-
+	exports.getHighValue = getHighValue;
+	exports.getLowValue = getLowValue;
 	exports.Background = Background;
-	
+	exports.Array2dTo1d = Array2dTo1d;
+	exports.RenderThis = RenderThis;
+	exports.InjectPositionRender = InjectPositionRender;
+	exports.DEFAULT_COLOR = DEFAULT_COLOR;
 	
 	
 
